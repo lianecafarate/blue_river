@@ -1,8 +1,10 @@
 import ballerina/io;
 import ballerina/sql;
-import ballerina/time;
 
 public function main() returns error? {
+    // ===== PATIENT TESTING =====
+    io:println("\n===== Testing Patient Operations =====");
+    
     // Create sample patient data
     Patient samplePatient = {
         patientId: "PAT001",
@@ -11,149 +13,161 @@ public function main() returns error? {
         patientPhoneNumber: "+1-555-0001"
     };
 
-    // Create sample doctor data
-    Doctor sampleDoctor = {
-        doctorId: "DOC001",
-        doctorName: "Dr. Smith",
-        specialization: "General Medicine"
-    };
+    // Insert sample patient into database and get the returned patient ID
+    string|PatientError|sql:Error insertResult = insertPatient(samplePatient);
 
-    // Create sample hospital data
-    Hospital sampleHospital = {
-        hospitalName: "City General Hospital",
-        hospitalId: "CGH001",
-        hospitalAddress: "123 Main Street, City Center"
-    };
-
-    // Create specific appointment time using Civil time and convert to UTC
-    time:Civil appointmentCivil = {
-        year: 2025,
-        month: 7,
-        day: 29,
-        hour: 10,
-        minute: 30,
-        second: 0.0,
-        utcOffset: {hours: 0, minutes: 0}
-    };
-    time:Utc appointmentTime = check time:utcFromCivil(appointmentCivil);
-
-    // Create sample appointment with new structure
-    Appointment sampleAppointment = {
-        appointmentId: "APT001",
-        patient: samplePatient,
-        doctor: sampleDoctor,
-        hospital: sampleHospital,
-        appointmentTime: appointmentTime,
-        status: "Scheduled",
-        notes: "Regular checkup"
-    };
-
-    // Insert appointment into database
-    sql:ExecutionResult|sql:Error insertResult = insertAppointment(sampleAppointment);
-    if insertResult is sql:Error {
-        io:println("Error inserting appointment: ", insertResult.message());
+    if insertResult is DuplicatePatientError {
+        io:println("Duplicate Patient Error: ", insertResult.message());
+    } else if insertResult is sql:Error {
+        io:println("Database Error inserting patient: ", insertResult.message());
     } else {
-        io:println("Appointment inserted successfully. Affected rows: ", insertResult.affectedRowCount);
-        
-        // Display the formatted datetime using utility function
-        string formattedDatetime = formatDisplayDatetime(appointmentTime);
-        io:println("Appointment datetime: ", formattedDatetime);
+        io:println("Patient inserted successfully with ID: ", insertResult);
     }
 
-    // Retrieve appointments by patient ID
-    Appointment[]|sql:Error|error appointments = getAppointmentsByPatientId("PAT001");
-    if appointments is sql:Error {
-        io:println("Error retrieving appointments: ", appointments.message());
-    } else if appointments is error {
-        io:println("Error parsing appointments: ", appointments.message());
-    } else {
-        io:println("Retrieved appointments: ", appointments.length());
-        foreach Appointment appointment in appointments {
-            io:println("Appointment ID: ", appointment.appointmentId);
-            io:println("Patient: ", appointment.patient.patientName);
-            io:println("Doctor: ", appointment.doctor.doctorName);
-            io:println("Hospital: ", appointment.hospital.hospitalName);
-            
-            // Use utility function for display formatting
-            string displayDatetime = formatDisplayDatetime(appointment.appointmentTime);
-            io:println("Datetime: ", displayDatetime);
-        }
-    }
-
-    // Create another sample appointment with different datetime
-    Patient anotherPatient = {
-        patientId: "PAT002",
-        patientName: "Jane Smith",
-        patientEmail: "jane.smith@email.com",
+    // Test with the same patient again to see duplicate error
+    Patient duplicatePatient = {
+        patientId: "PAT002", // Different ID but same email
+        patientName: "John Doe Updated",
+        patientEmail: "john.doe@email.com", // Same email
         patientPhoneNumber: "+1-555-0002"
     };
 
-    Doctor anotherDoctor = {
-        doctorId: "DOC002",
-        doctorName: "Dr. Johnson",
+    string|PatientError|sql:Error duplicateResult = insertPatient(duplicatePatient);
+
+    if duplicateResult is DuplicatePatientError {
+        io:println("Duplicate Patient Error: ", duplicateResult.message());
+    } else if duplicateResult is sql:Error {
+        io:println("Database Error processing duplicate patient: ", duplicateResult.message());
+    } else {
+        io:println("Unexpected success for duplicate patient with ID: ", duplicateResult);
+    }
+
+    // Test with a completely new patient
+    Patient newPatient = {
+        patientId: "PAT003",
+        patientName: "Jane Smith",
+        patientEmail: "jane.smith@email.com", // Different email
+        patientPhoneNumber: "+1-555-0003"
+    };
+
+    string|PatientError|sql:Error newResult = insertPatient(newPatient);
+
+    if newResult is DuplicatePatientError {
+        io:println("Unexpected Duplicate Patient Error: ", newResult.message());
+    } else if newResult is sql:Error {
+        io:println("Database Error inserting new patient: ", newResult.message());
+    } else {
+        io:println("New patient inserted successfully with ID: ", newResult);
+    }
+
+    // ===== DOCTOR TESTING =====
+    io:println("\n===== Testing Doctor Operations =====");
+
+    // Create sample doctor data
+    Doctor sampleDoctor = {
+        doctorId: "DOC001",
+        doctorName: "John Smith",
         specialization: "Cardiology"
     };
 
-    // Create another specific appointment time
-    time:Civil anotherAppointmentCivil = {
-        year: 2024,
-        month: 12,
-        day: 26,
-        hour: 14,
-        minute: 15,
-        second: 0.0,
-        utcOffset: {hours: 0, minutes: 0}
-    };
-    time:Utc anotherAppointmentTime = check time:utcFromCivil(anotherAppointmentCivil);
+    // Insert sample doctor into database and get the returned doctor ID
+    string|DoctorError|sql:Error doctorInsertResult = insertDoctor(sampleDoctor);
 
-    Appointment anotherAppointment = {
-        appointmentId: "APT002",
-        patient: anotherPatient,
-        doctor: anotherDoctor,
-        hospital: sampleHospital,
-        appointmentTime: anotherAppointmentTime,
-        status: "Confirmed",
-        notes: "Follow-up consultation"
-    };
-
-    // Insert second appointment
-    sql:ExecutionResult|sql:Error anotherInsertResult = insertAppointment(anotherAppointment);
-    if anotherInsertResult is sql:Error {
-        io:println("Error inserting second appointment: ", anotherInsertResult.message());
+    if doctorInsertResult is DuplicateDoctorError {
+        io:println("Duplicate Doctor Error: ", doctorInsertResult.message());
+    } else if doctorInsertResult is sql:Error {
+        io:println("Database Error inserting doctor: ", doctorInsertResult.message());
     } else {
-        io:println("Second appointment inserted successfully. Affected rows: ", anotherInsertResult.affectedRowCount);
+        io:println("Doctor inserted successfully with ID: ", doctorInsertResult);
     }
 
-    // Retrieve appointments by doctor name
-    Appointment[]|sql:Error|error doctorAppointments = getAppointmentsByDoctorName("Dr. Johnson");
-    if doctorAppointments is sql:Error {
-        io:println("Error retrieving doctor appointments: ", doctorAppointments.message());
-    } else if doctorAppointments is error {
-        io:println("Error parsing doctor appointments: ", doctorAppointments.message());
+    // Test with the same doctor again to see duplicate error
+    Doctor duplicateDoctor = {
+        doctorId: "DOC002", // Different ID but same name
+        doctorName: "John Smith", // Same name
+        specialization: "General Medicine"
+    };
+
+    string|DoctorError|sql:Error doctorDuplicateResult = insertDoctor(duplicateDoctor);
+
+    if doctorDuplicateResult is DuplicateDoctorError {
+        io:println("Duplicate Doctor Error: ", doctorDuplicateResult.message());
+    } else if doctorDuplicateResult is sql:Error {
+        io:println("Database Error processing duplicate doctor: ", doctorDuplicateResult.message());
     } else {
-        io:println("Dr. Johnson's appointments: ", doctorAppointments.length());
-        foreach Appointment appointment in doctorAppointments {
-            io:println("Patient: ", appointment.patient.patientName);
-            io:println("Status: ", appointment.status);
-            
-            // Use utility function for cleaner display
-            string appointmentDatetime = formatDisplayDatetime(appointment.appointmentTime);
-            io:println("Appointment datetime: ", appointmentDatetime);
-        }
+        io:println("Unexpected success for duplicate doctor with ID: ", doctorDuplicateResult);
     }
 
-    // Test date range query
-    Appointment[]|sql:Error|error rangeAppointments = getAppointmentsByDateRange("2024-12-25 00:00:00", "2024-12-26 23:59:59");
-    if rangeAppointments is sql:Error {
-        io:println("Error retrieving appointments by date range: ", rangeAppointments.message());
-    } else if rangeAppointments is error {
-        io:println("Error parsing range appointments: ", rangeAppointments.message());
+    // Test with a completely new doctor
+    Doctor newDoctor = {
+        doctorId: "DOC003",
+        doctorName: "James Johnson", // Different name
+        specialization: "Neurology"
+    };
+
+    string|DoctorError|sql:Error newDoctorResult = insertDoctor(newDoctor);
+
+    if newDoctorResult is DuplicateDoctorError {
+        io:println("Unexpected Duplicate Doctor Error: ", newDoctorResult.message());
+    } else if newDoctorResult is sql:Error {
+        io:println("Database Error inserting new doctor: ", newDoctorResult.message());
     } else {
-        io:println("Appointments in date range: ", rangeAppointments.length());
-        foreach Appointment appointment in rangeAppointments {
-            string displayDatetime = formatDisplayDatetime(appointment.appointmentTime);
-            io:println("Patient: ", appointment.patient.patientName, " - Datetime: ", displayDatetime);
-        }
+        io:println("New doctor inserted successfully with ID: ", newDoctorResult);
+    }
+
+    // ===== HOSPITAL TESTING =====
+    io:println("\n===== Testing Hospital Operations =====");
+
+    // Create sample hospital data
+    Hospital sampleHospital = {
+        hospitalId: "HOS001",
+        hospitalName: "City General Hospital",
+        hospitalAddress: "123 Main Street, Downtown"
+    };
+
+    // Insert sample hospital into database and get the returned hospital ID
+    string|HospitalError|sql:Error hospitalInsertResult = insertHospital(sampleHospital);
+
+    if hospitalInsertResult is DuplicateHospitalError {
+        io:println("Duplicate Hospital Error: ", hospitalInsertResult.message());
+    } else if hospitalInsertResult is sql:Error {
+        io:println("Database Error inserting hospital: ", hospitalInsertResult.message());
+    } else {
+        io:println("Hospital inserted successfully with ID: ", hospitalInsertResult);
+    }
+
+    // Test with the same hospital again to see duplicate error
+    Hospital duplicateHospital = {
+        hospitalId: "HOS002", // Different ID but same name
+        hospitalName: "City General Hospital", // Same name
+        hospitalAddress: "456 Oak Avenue, Uptown"
+    };
+
+    string|HospitalError|sql:Error hospitalDuplicateResult = insertHospital(duplicateHospital);
+
+    if hospitalDuplicateResult is DuplicateHospitalError {
+        io:println("Duplicate Hospital Error: ", hospitalDuplicateResult.message());
+    } else if hospitalDuplicateResult is sql:Error {
+        io:println("Database Error processing duplicate hospital: ", hospitalDuplicateResult.message());
+    } else {
+        io:println("Unexpected success for duplicate hospital with ID: ", hospitalDuplicateResult);
+    }
+
+    // Test with a completely new hospital
+    Hospital newHospital = {
+        hospitalId: "HOS003",
+        hospitalName: "Regional Medical Center", // Different name
+        hospitalAddress: "789 Pine Street, Westside"
+    };
+
+    string|HospitalError|sql:Error newHospitalResult = insertHospital(newHospital);
+
+    if newHospitalResult is DuplicateHospitalError {
+        io:println("Unexpected Duplicate Hospital Error: ", newHospitalResult.message());
+    } else if newHospitalResult is sql:Error {
+        io:println("Database Error inserting new hospital: ", newHospitalResult.message());
+    } else {
+        io:println("New hospital inserted successfully with ID: ", newHospitalResult);
     }
 
     // Close database connection when done

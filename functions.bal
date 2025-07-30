@@ -1,227 +1,257 @@
 import ballerina/sql;
-import ballerina/time;
 
-// Function to insert appointment data into MySQL database
-public function insertAppointment(Appointment appointment) returns sql:ExecutionResult|sql:Error {
-    // Convert time:Utc to MySQL datetime format using utility function
-    string appointmentDatetime = utcToMySQLDatetime(appointment.appointmentTime);
-    
-    // Extract patient information
-    string patientId = appointment.patient.patientId;
-    string patientName = appointment.patient.patientName;
-    string patientEmail = appointment.patient.patientEmail;
-    string? patientPhone = appointment.patient.patientPhoneNumber;
-    
-    // Extract doctor information
-    string? doctorId = appointment.doctor.doctorId;
-    string doctorName = appointment.doctor.doctorName;
-    string? specialization = appointment.doctor.specialization;
-    
-    // Extract hospital information
-    string hospitalName = appointment.hospital.hospitalName;
-    string? hospitalId = appointment.hospital.hospitalId;
-    string? hospitalAddress = appointment.hospital.hospitalAddress;
-    
-    // Insert without appointmentId if it's auto-generated
-    sql:ParameterizedQuery insertQuery = `
-        INSERT INTO appointment (
-            patientId, patientName, patientEmail, patientPhone,
-            doctorId, doctorName, specialization,
-            hospitalName, hospitalId, hospitalAddress,
-            appointmentTime, status, notes
-        ) VALUES (
-            ${patientId}, ${patientName}, ${patientEmail}, ${patientPhone},
-            ${doctorId}, ${doctorName}, ${specialization},
-            ${hospitalName}, ${hospitalId}, ${hospitalAddress},
-            ${appointmentDatetime}, ${appointment.status}, ${appointment.notes}
-        )
-    `;
-    
-    return mysqlClient->execute(insertQuery);
-}
-
-// Define a record type for database query results
-type AppointmentRow record {|
-    int id;  // Auto-generated primary key
-    string patient_id;
-    string patient_name;
-    string patient_email;
-    string? patient_phone;
-    string? doctor_id;
-    string doctor_name;
-    string? specialization;
-    string hospital_name;
-    string? hospital_id;
-    string? hospital_address;
-    string appointment_datetime;
-    string? status;
-    string? notes;
+// Define record type for patient query results
+type PatientRow record {|
+    int id;
+    string patientId;
+    string patientName;
+    string patientEmail;
+    string? patientPhoneNumber;
 |};
 
-// Function to retrieve appointments by patient ID
-public function getAppointmentsByPatientId(string patientId) returns Appointment[]|sql:Error|error {
+// Define record type for doctor query results
+type DoctorRow record {|
+    int id;
+    string doctorId;
+    string doctorName;
+    string? specialization;
+|};
+
+// Define record type for hospital query results
+type HospitalRow record {|
+    int id;
+    string hospitalId;
+    string hospitalName;
+    string? hospitalAddress;
+|};
+
+// Function to check if patient exists by email
+public function getPatientByEmail(string email) returns Patient|sql:Error|() {
     sql:ParameterizedQuery selectQuery = `
-        SELECT id, patientId, patientName, patientEmail, patientPhone,
-               doctorId, doctorName, specialization,
-               hospitalName, hospitalId, hospitalAddress,
-               appointmentTime, status, notes
-        FROM appointment 
-        WHERE patientId = ${patientId}
+        SELECT patientId, patientName, patientEmail, patientPhoneNumber
+        FROM patient 
+        WHERE patientEmail = ${email}
     `;
     
-    stream<AppointmentRow, sql:Error?> resultStream = mysqlClient->query(selectQuery);
-    Appointment[] appointments = [];
+    // Use query() instead of queryRow() to handle no results gracefully
+    stream<PatientRow, sql:Error?> resultStream = mysqlClient->query(selectQuery);
     
-    check from AppointmentRow row in resultStream
-        do {
-            // Parse MySQL datetime string using utility function
-            string datetimeStr = row.appointment_datetime;
-            time:Utc appointmentUtc = check parseMySQLDatetime(datetimeStr);
-            
-            // Create nested records
-            Patient patient = {
-                patientId: row.patient_id,
-                patientName: row.patient_name,
-                patientEmail: row.patient_email,
-                patientPhoneNumber: row.patient_phone
-            };
-            
-            Doctor doctor = {
-                doctorId: row.doctor_id,
-                doctorName: row.doctor_name,
-                specialization: row.specialization
-            };
-            
-            Hospital hospital = {
-                hospitalName: row.hospital_name,
-                hospitalId: row.hospital_id,
-                hospitalAddress: row.hospital_address
-            };
-            
-            Appointment appointment = {
-                appointmentId: row.id.toString(), // Convert auto-generated ID to string
-                patient: patient,
-                doctor: doctor,
-                hospital: hospital,
-                appointmentTime: appointmentUtc,
-                status: row.status,
-                notes: row.notes
-            };
-            
-            appointments.push(appointment);
+    // Check if there are any results
+    record {|PatientRow value;|}|sql:Error? result = resultStream.next();
+    
+    if result is sql:Error {
+        return result;
+    } else if result is () {
+        // No patient found with this email
+        return ();
+    } else {
+        // Patient exists, return the Patient record
+        PatientRow patientRow = result.value;
+        Patient existingPatient = {
+            patientId: patientRow.patientId,
+            patientName: patientRow.patientName,
+            patientEmail: patientRow.patientEmail,
+            patientPhoneNumber: patientRow.patientPhoneNumber
         };
-    
-    return appointments;
+        
+        // Close the stream
+        check resultStream.close();
+        return existingPatient;
+    }
 }
 
-// Function to retrieve appointments by doctor name
-public function getAppointmentsByDoctorName(string doctorName) returns Appointment[]|sql:Error|error {
+// Function to check if doctor exists by name
+public function getDoctorByName(string doctorName) returns Doctor|sql:Error|() {
     sql:ParameterizedQuery selectQuery = `
-        SELECT appointmentId, patientId, patientName, patientEmail, patientPhone,
-               doctorId, doctorName, specialization,
-               hospitalName, hospitalId, hospitalAddress,
-               appointmentTime, status, notes
-        FROM appointment 
+        SELECT doctorId, doctorName, specialization
+        FROM doctor 
         WHERE doctorName = ${doctorName}
     `;
     
-    stream<AppointmentRow, sql:Error?> resultStream = mysqlClient->query(selectQuery);
-    Appointment[] appointments = [];
+    // Use query() instead of queryRow() to handle no results gracefully
+    stream<DoctorRow, sql:Error?> resultStream = mysqlClient->query(selectQuery);
     
-    check from AppointmentRow row in resultStream
-        do {
-            // Parse MySQL datetime string using utility function
-            string datetimeStr = row.appointment_datetime;
-            time:Utc appointmentUtc = check parseMySQLDatetime(datetimeStr);
-            
-            Patient patient = {
-                patientId: row.patient_id,
-                patientName: row.patient_name,
-                patientEmail: row.patient_email,
-                patientPhoneNumber: row.patient_phone
-            };
-            
-            Doctor doctor = {
-                doctorId: row.doctor_id,
-                doctorName: row.doctor_name,
-                specialization: row.specialization
-            };
-            
-            Hospital hospital = {
-                hospitalName: row.hospital_name,
-                hospitalId: row.hospital_id,
-                hospitalAddress: row.hospital_address
-            };
-            
-            Appointment appointment = {
-                appointmentId: row.id.toString(),
-                patient: patient,
-                doctor: doctor,
-                hospital: hospital,
-                appointmentTime: appointmentUtc,
-                status: row.status,
-                notes: row.notes
-            };
-            
-            appointments.push(appointment);
+    // Check if there are any results
+    record {|DoctorRow value;|}|sql:Error? result = resultStream.next();
+    
+    if result is sql:Error {
+        return result;
+    } else if result is () {
+        // No doctor found with this name
+        return ();
+    } else {
+        // Doctor exists, return the Doctor record
+        DoctorRow doctorRow = result.value;
+        Doctor existingDoctor = {
+            doctorId: doctorRow.doctorId,
+            doctorName: doctorRow.doctorName,
+            specialization: doctorRow.specialization
         };
-    
-    return appointments;
+        
+        // Close the stream
+        check resultStream.close();
+        return existingDoctor;
+    }
 }
 
-// Function to retrieve appointments by date range
-public function getAppointmentsByDateRange(string startDate, string endDate) returns Appointment[]|sql:Error|error {
+// Function to check if hospital exists by name
+public function getHospitalByName(string hospitalName) returns Hospital|sql:Error|() {
     sql:ParameterizedQuery selectQuery = `
-        SELECT appointmentId, patientId, patientName, patientEmail, patientPhone,
-               doctorId, doctorName, specialization,
-               hospitalName, hospitalId, hospitalAddress,
-               appointmentTime, status, notes
-        FROM appointment 
-        WHERE appointmentTime BETWEEN ${startDate} AND ${endDate}
-        ORDER BY appointmentTime
+        SELECT hospitalId, hospitalName, hospitalAddress
+        FROM hospital 
+        WHERE hospitalName = ${hospitalName}
     `;
     
-    stream<AppointmentRow, sql:Error?> resultStream = mysqlClient->query(selectQuery);
-    Appointment[] appointments = [];
+    // Use query() instead of queryRow() to handle no results gracefully
+    stream<HospitalRow, sql:Error?> resultStream = mysqlClient->query(selectQuery);
     
-    check from AppointmentRow row in resultStream
-        do {
-            string datetimeStr = row.appointment_datetime;
-            time:Utc appointmentUtc = check parseMySQLDatetime(datetimeStr);
-            
-            Patient patient = {
-                patientId: row.patient_id,
-                patientName: row.patient_name,
-                patientEmail: row.patient_email,
-                patientPhoneNumber: row.patient_phone
-            };
-            
-            Doctor doctor = {
-                doctorId: row.doctor_id,
-                doctorName: row.doctor_name,
-                specialization: row.specialization
-            };
-            
-            Hospital hospital = {
-                hospitalName: row.hospital_name,
-                hospitalId: row.hospital_id,
-                hospitalAddress: row.hospital_address
-            };
-            
-            Appointment appointment = {
-                appointmentId: row.id.toString(),
-                patient: patient,
-                doctor: doctor,
-                hospital: hospital,
-                appointmentTime: appointmentUtc,
-                status: row.status,
-                notes: row.notes
-            };
-            
-            appointments.push(appointment);
+    // Check if there are any results
+    record {|HospitalRow value;|}|sql:Error? result = resultStream.next();
+    
+    if result is sql:Error {
+        return result;
+    } else if result is () {
+        // No hospital found with this name
+        return ();
+    } else {
+        // Hospital exists, return the Hospital record
+        HospitalRow hospitalRow = result.value;
+        Hospital existingHospital = {
+            hospitalId: hospitalRow.hospitalId,
+            hospitalName: hospitalRow.hospitalName,
+            hospitalAddress: hospitalRow.hospitalAddress
         };
+        
+        // Close the stream
+        check resultStream.close();
+        return existingHospital;
+    }
+}
+
+// Function to insert Patient into database and return the generated patient ID
+// Returns clear error if patient already exists by email
+public function insertPatient(Patient patient) returns string|PatientError|sql:Error {
+    // First check if patient already exists by email
+    Patient|sql:Error|() existingPatient = getPatientByEmail(patient.patientEmail);
     
-    return appointments;
+    if existingPatient is sql:Error {
+        return existingPatient;
+    } else if existingPatient is Patient {
+        // Patient already exists, return clear duplicate error
+        string errorMessage = string `Patient with email '${patient.patientEmail}' already exists with ID: ${existingPatient.patientId}`;
+        return error DuplicatePatientError(errorMessage);
+    }
+    
+    // Patient doesn't exist, proceed with insertion
+    sql:ParameterizedQuery insertQuery = `
+        INSERT INTO patient (
+            patientId, patientName, patientEmail, patientPhoneNumber
+        ) VALUES (
+            ${patient.patientId}, ${patient.patientName}, ${patient.patientEmail}, ${patient.patientPhoneNumber}
+        )
+    `;
+    
+    sql:ExecutionResult|sql:Error result = mysqlClient->execute(insertQuery);
+    
+    if result is sql:Error {
+        return result;
+    } else {
+        // Extract the generated ID from the execution result
+        string|int? generatedId = result.lastInsertId;
+        
+        if generatedId is string {
+            return generatedId;
+        } else if generatedId is int {
+            return generatedId.toString();
+        } else {
+            // If no ID was generated, return the provided patientId
+            return patient.patientId;
+        }
+    }
+}
+
+// Function to insert Doctor into database and return the generated doctor ID
+// Returns clear error if doctor already exists by name
+public function insertDoctor(Doctor doctor) returns string|DoctorError|sql:Error {
+    // First check if doctor already exists by name
+    Doctor|sql:Error|() existingDoctor = getDoctorByName(doctor.doctorName);
+    
+    if existingDoctor is sql:Error {
+        return existingDoctor;
+    } else if existingDoctor is Doctor {
+        // Doctor already exists, return clear duplicate error
+        string errorMessage = string `Doctor with name '${doctor.doctorName}' already exists with ID: ${existingDoctor.doctorId ?: "N/A"}`;
+        return error DuplicateDoctorError(errorMessage);
+    }
+    
+    // Doctor doesn't exist, proceed with insertion
+    sql:ParameterizedQuery insertQuery = `
+        INSERT INTO doctor (
+            doctorId, doctorName, specialization
+        ) VALUES (
+            ${doctor.doctorId}, ${doctor.doctorName}, ${doctor.specialization}
+        )
+    `;
+    
+    sql:ExecutionResult|sql:Error result = mysqlClient->execute(insertQuery);
+    
+    if result is sql:Error {
+        return result;
+    } else {
+        // Extract the generated ID from the execution result
+        string|int? generatedId = result.lastInsertId;
+        
+        if generatedId is string {
+            return generatedId;
+        } else if generatedId is int {
+            return generatedId.toString();
+        } else {
+            // If no ID was generated, return the provided doctorId
+            return doctor.doctorId ?: "UNKNOWN";
+        }
+    }
+}
+
+// Function to insert Hospital into database and return the generated hospital ID
+// Returns clear error if hospital already exists by name
+public function insertHospital(Hospital hospital) returns string|HospitalError|sql:Error {
+    // First check if hospital already exists by name
+    Hospital|sql:Error|() existingHospital = getHospitalByName(hospital.hospitalName);
+    
+    if existingHospital is sql:Error {
+        return existingHospital;
+    } else if existingHospital is Hospital {
+        // Hospital already exists, return clear duplicate error
+        string errorMessage = string `Hospital with name '${hospital.hospitalName}' already exists with ID: ${existingHospital.hospitalId ?: "N/A"}`;
+        return error DuplicateHospitalError(errorMessage);
+    }
+    
+    // Hospital doesn't exist, proceed with insertion
+    sql:ParameterizedQuery insertQuery = `
+        INSERT INTO hospital (
+            hospitalId, hospitalName, hospitalAddress
+        ) VALUES (
+            ${hospital.hospitalId}, ${hospital.hospitalName}, ${hospital.hospitalAddress}
+        )
+    `;
+    
+    sql:ExecutionResult|sql:Error result = mysqlClient->execute(insertQuery);
+    
+    if result is sql:Error {
+        return result;
+    } else {
+        // Extract the generated ID from the execution result
+        string|int? generatedId = result.lastInsertId;
+        
+        if generatedId is string {
+            return generatedId;
+        } else if generatedId is int {
+            return generatedId.toString();
+        } else {
+            // If no ID was generated, return the provided hospitalId
+            return hospital.hospitalId ?: "UNKNOWN";
+        }
+    }
 }
 
 // Function to close database connection
