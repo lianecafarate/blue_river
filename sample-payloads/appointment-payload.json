@@ -1,0 +1,18 @@
+{
+  "appointmentId": "APT001",
+  "patient": {
+    "patientId": "PAT002",
+    "patientName": "Amy Williams",
+    "patientEmail": "amy.williams@gmail.com",
+    "patientPhoneNumber": "+1-555-123-4567"
+  },
+  "doctor": {
+    "doctorId": "DOC002",
+    "doctorName": "Rafael Costa",
+    "specialization": "Cardiology"
+  },
+  "hospital": "Green Valley Hospital",
+  "appointmentTime": "2025-08-15 10:30:00",
+  "status": "scheduled",
+  "notes": "Patient reported occasional chest pain. Follow-up required."
+}

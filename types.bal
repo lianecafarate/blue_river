@@ -1,8 +1,6 @@
-import ballerina/time;
-
 // Patient information record
 public type Patient record {|
-    string patientId;
+    string patientId?;
     string patientName;
     string patientEmail;
     string patientPhoneNumber?;
@@ -15,20 +13,15 @@ public type Doctor record {|
     string specialization?;
 |};
 
-// Hospital information record
-public type Hospital record {|
-    string hospitalName;
-    string hospitalId?;
-    string hospitalAddress?;
-|};
 
-// Main appointment record
+// Appointment record
 public type Appointment record {|
+    string appointmentId?;
     Patient patient;
     Doctor doctor;
-    Hospital hospital;
-    time:Utc appointmentTime;
-    string appointmentId?;
+    string hospital;
+    //YYYY-MM-DD hh:mm:ss
+    string appointmentTime;
     string status?;
     string notes?;
 |};
@@ -45,8 +38,8 @@ public type DuplicateDoctorError distinct error;
 // Custom error type for doctor operations
 public type DoctorError DuplicateDoctorError;
 
-// Custom error type for duplicate hospital
-public type DuplicateHospitalError distinct error;
+// Custom error type for duplicate appointment
+public type DuplicateAppointmentError distinct error;
 
-// Custom error type for hospital operations
-public type HospitalError DuplicateHospitalError;
+// Custom error type for appointment operations
+public type AppointmentError DuplicateAppointmentError;
