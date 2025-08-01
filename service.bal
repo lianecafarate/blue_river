@@ -26,6 +26,16 @@ type AppointmentResponse record {|
     string status;
 |};
 
+type AppointmentDetailsResponse record {|
+    string appointmentId;
+    string patientId;
+    string doctorId;
+    string hospital;
+    string appointmentTime;
+    string status?;
+    string notes?;
+|};
+
 type ErrorResponse record {|
     string message;
     string errorType;
@@ -226,6 +236,41 @@ service /appointment on new http:Listener(appointmentServicePort) {
                 }
             };
             return errorResponse;
+        }
+    }
+
+    // GET endpoint to retrieve appointment information
+    // curl "http://localhost:8082/appointment?appointmentId=id" | jq
+    resource function get .(string appointmentId) returns AppointmentDetailsResponse|http:NotFound|http:InternalServerError|error {
+        AppointmentRow|sql:Error|() appointmentResult = getAppointmentById(appointmentId);
+
+        if appointmentResult is AppointmentRow {
+            AppointmentDetailsResponse response = {
+                appointmentId: appointmentResult.appointmentId,
+                patientId: appointmentResult.patientId,
+                doctorId: appointmentResult.doctorId,
+                hospital: appointmentResult.hospital,
+                appointmentTime: appointmentResult.appointmentTime,
+                status: appointmentResult.status,
+                notes: appointmentResult.notes
+            };
+            return response;
+        } else if appointmentResult is sql:Error {
+            http:InternalServerError errorResponse = {
+                body: {
+                    message: appointmentResult.message(),
+                    errorType: "DatabaseError"
+                }
+            };
+            return errorResponse;
+        } else {
+            http:NotFound notFoundResponse = {
+                body: {
+                    message: "Appointment not found",
+                    errorType: "NotFound"
+                }
+            };
+            return notFoundResponse;
         }
     }
 }
