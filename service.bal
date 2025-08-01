@@ -1,10 +1,7 @@
 import ballerina/http;
 import ballerina/sql;
-
-// HTTP service configuration
-configurable int patientServicePort = 8080;
-configurable int doctorServicePort = 8081;
-configurable int appointmentServicePort = 8082;
+import ballerinax/ibm.ibmmq;
+import ballerina/log;
 
 // Define response record types
 type PatientResponse record {|
@@ -272,5 +269,27 @@ service /appointment on new http:Listener(appointmentServicePort) {
             };
             return notFoundResponse;
         }
+    }
+}
+
+// ===== IBM MQ Integration =====
+listener ibmmq:Listener ibmmqListener = check new({
+    name: queueManagerName,
+    host: queueHost,
+    port: queuePort,
+    channel: queueChannel,
+    userID: queueUserID,
+    password: queuePassword
+});
+
+@ibmmq:ServiceConfig {
+    queueName,
+    pollingInterval
+}
+
+service on ibmmqListener { 
+    remote function onMessage(ibmmq:Message message) returns error? {
+        // Handle incoming messages from the IBM MQ
+        log:printInfo("Received message from IBM MQ: ", message = check string:fromBytes(message.payload));
     }
 }
