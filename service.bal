@@ -187,7 +187,7 @@ service /doctor on new http:Listener(doctorServicePort) {
 service /appointment on new http:Listener(appointmentServicePort) {
     // POST endpoint to create a new appointment
     // curl -X POST http://localhost:8082/appointment -H "Content-Type: application/json" -d @appointment-payload.json | jq
-    resource function post .(Appointment appointmentRequest) returns AppointmentResponse|ErrorResponse {
+    resource function post .(Appointment appointmentRequest) returns AppointmentResponse|http:InternalServerError|error {
         Appointment appointment = {
             patient: appointmentRequest.patient,
             doctor: appointmentRequest.doctor,
@@ -197,39 +197,35 @@ service /appointment on new http:Listener(appointmentServicePort) {
             status: appointmentRequest.status,
             notes: appointmentRequest.notes
         };
-        string|error result = createAppointment(appointment);
+
+        string|AppointmentError|sql:Error result = createAppointment(appointment);
+
         if result is string {
             // Appointment created successfully
             AppointmentResponse successResponse = {
-               appointmentId: result,
-               message: "Appointment created successfully",
-               status: "success"
-           };
-           return successResponse;
-       } else if result is DuplicatePatientError {
-           // Duplicate patient error
-           ErrorResponse errorResponse = {
-               message: result.message(),
-               errorType: "DuplicatePatientError",
-               statusCode: 409
-           };
-           return errorResponse;
-       } else if result is DuplicateDoctorError {
-           // Duplicate doctor error
-           ErrorResponse errorResponse = {
-               message: result.message(),
-               errorType: "DuplicateDoctorError",
-               statusCode: 409
-           };
-           return errorResponse;
-       } else {
-           // General error case
-           ErrorResponse errorResponse = {
-               message: result.message(),
-               errorType: "DatabaseError",
-               statusCode: 500
-           };
-           return errorResponse;
-       }
+                appointmentId: result,
+                message: "Appointment created successfully",
+                status: "success"
+            };
+            return successResponse;
+        } else if result is AppointmentError {
+            // Handle appointment-specific errors
+            http:InternalServerError errorResponse = {
+                body: {
+                    message: result.message(),
+                    errorType: "AppointmentError"
+                }
+            };
+            return errorResponse;
+        } else {
+            // Handle generic SQL errors
+            http:InternalServerError errorResponse = {
+                body: {
+                    message: result.message(),
+                    errorType: "DatabaseError"
+                }
+            };
+            return errorResponse;
+        }
     }
 }

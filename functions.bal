@@ -240,8 +240,46 @@ public function insertDoctor(Doctor doctor) returns string|DoctorError|sql:Error
     }
 }
 
-// Function to insert appointment into database
+// Function to check if appointment exists by ID
+public function getAppointmentById(string appointmentId) returns AppointmentRow|sql:Error|() {
+    sql:ParameterizedQuery selectQuery = `
+        SELECT appointmentId, patientId, doctorId, hospital, appointmentTime, status, notes
+        FROM appointment 
+        WHERE appointmentId = ${appointmentId}
+    `;
+    
+    AppointmentRow|sql:Error result = mysqlClient->queryRow(selectQuery);
+
+    if result is sql:NoRowsError {
+        // No appointment found with this ID
+        return ();
+    } else if result is sql:Error {
+        // This is an actual database error
+        return result;
+    } else {
+        // Appointment exists, return the Appointment record
+        return result;
+    }
+}
+
+// Function to insert appointment into database with duplicate checking
 public function insertAppointment(Appointment appointment, string patientId, string doctorId, string hospital) returns string|AppointmentError|sql:Error {
+    // Check if appointment already exists if appointmentId is provided
+    if appointment.appointmentId is string {
+        string appointmentId = appointment.appointmentId ?: "";
+        if appointmentId != "" {
+            AppointmentRow|sql:Error|() existingAppointment = getAppointmentById(appointmentId);
+            
+            if existingAppointment is sql:Error {
+                return existingAppointment;
+            } else if existingAppointment is AppointmentRow {
+                // Appointment already exists, return clear duplicate error
+                string errorMessage = string `Appointment with ID '${appointmentId}' already exists`;
+                return error DuplicateAppointmentError(errorMessage);
+            }
+        }
+    }
+    
     // Insert appointment into database
     sql:ParameterizedQuery insertQuery = `
         INSERT INTO appointment (
